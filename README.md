@@ -89,9 +89,10 @@ Backend Key Features
 
 Frontend Key Features
 - 
-- **Puzzle loading:** 4 puzzles are provided, additionally, upload puzzle option is provided which sends the file to `/api/sudoku/upload`. The backend's solution is used to check the player's answer.
+## Puzzle loading: 
+4 puzzles are provided, additionally, upload puzzle option is provided which sends the file to `/api/sudoku/upload`. The backend's solution is used to check the player's answer.
 
-- <strong><u>Mode 1 - Watch the algorithm:</u></strong>
+## Mode 1 - Watch the algorithm:
 - Animates every step: **place**, **guess**, **undo** and **dead end**.
 - **Play / Pause**, **Step**, **Reset**, **Skip to end**, and a **speed slider**.
 - For each step, shows the cell's options and the **bit table**: row, column and box masks, `OR = used` and `~used = free`.
@@ -100,7 +101,7 @@ Frontend Key Features
   
 > The backend only returns the final board, so the frontend runs a JavaScript copy of the same algorithm (same bitmasks, MRV and backtracking) to record and replay the steps.
 
-- <strong><u>Mode 2 - Play:</u></strong>
+## Mode 2 - Play:
 - Click a cell and type 1–9, or use the on-screen number pad. Backspace or 0 erases, and arrow keys move.
 - Only digits 1–9 are accepted, and clue cells can't be edited.
 - A **timer** tracks how long the player takes and stops when the board matches the solution.
