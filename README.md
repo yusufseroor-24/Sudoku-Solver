@@ -91,7 +91,7 @@ Frontend Key Features
 - 
 - **Puzzle loading:** 4 puzzles are provided, additionally, upload puzzle option is provided which sends the file to `/api/sudoku/upload`. The backend's solution is used to check the player's answer.
 
-- <mark><strong><u>Mode 1 - Watch the algorithm:</u></strong></mark>
+- <mark><u>Mode 1 - Watch the algorithm:</u></mark>
 - Animates every step: **place**, **guess**, **undo** and **dead end**.
 - **Play / Pause**, **Step**, **Reset**, **Skip to end**, and a **speed slider**.
 - For each step, shows the cell's options and the **bit table**: row, column and box masks, `OR = used` and `~used = free`.
