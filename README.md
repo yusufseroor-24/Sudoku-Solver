@@ -81,6 +81,7 @@ Backend Key Features
 - **Saving solutions:** solutions are saved to `puzzles/<name>.solution.txt`.
 - **Solve timing:** `System.nanoTime()` is recorded before and after `solve()`, and the console prints how long each puzzle took to be solved.
 - **REST API:**
+  
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/api/sudoku/solve/{name}` | Solves `puzzles/{name}.txt`, e.g. `/api/sudoku/solve/puzzle1` |
@@ -90,7 +91,7 @@ Frontend Key Features
 - 
 - **Puzzle loading:** 4 puzzles are provided, additionally, upload puzzle option is provided which sends the file to `/api/sudoku/upload`. The backend's solution is used to check the player's answer.
 
--**Mode 1 - Watch the algorithm:**
+- **Mode 1 - Watch the algorithm:**
 - Animates every step: **place**, **guess**, **undo** and **dead end**.
 - **Play / Pause**, **Step**, **Reset**, **Skip to end**, and a **speed slider**.
 - For each step, shows the cell's options and the **bit table**: row, column and box masks, `OR = used` and `~used = free`.
