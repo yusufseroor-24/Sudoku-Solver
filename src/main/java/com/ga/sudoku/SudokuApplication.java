@@ -31,9 +31,15 @@ public class SudokuApplication implements CommandLineRunner {
 			SudokuBoard sudokuBoard = SudokuBoard.fromFile(file);
 			sudokuBoard.printBoard(title);
 
-			//solve the board, print it then save it
-			if(new SudokuSolver(sudokuBoard).solve()){
-				System.out.println("\t\t" + title + " solved");
+			//time the solver
+			long start = System.nanoTime();
+			boolean solved = new SudokuSolver(sudokuBoard).solve();
+			long end = System.nanoTime();
+			double ms = (end - start) / 1_000_000.0;
+
+			//print it then save it
+			if(solved){
+				System.out.printf("\t\t%s solved in %.3f ms%n", title, ms);
 				sudokuBoard.printBoard(title);
 				Path saved = sudokuBoard.saveSudokuSolution(PUZZLE_FOLDER);
 				System.out.println(title + " saved in " + saved);

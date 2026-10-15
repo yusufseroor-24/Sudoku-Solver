@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sudoku Solver</title>
+<style>
+  /* ================= COLOURS (light + dark) ================= */
+  :root {
+    --bg: #f4f1ea;
+    --panel: #fffdf8;
+    --ink: #1f2328;
+    --muted: #6b6f76;
+    --line: #d9d3c7;
+    --thick: #1f2328;
+    --clue: #1f2328;
+    --mine: #2f5fd0;
+    --accent: #2f5fd0;
+    --accent-soft: #e3eafb;
+    --place: #1f8a4c;
+    --place-soft: #dcf2e4;
+    --undo: #c2410c;
+    --undo-soft: #fde4d6;
+    --select: #fff1b8;
+    --same: #f0ece2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16181c;
+      --panel: #1f2227;
+      --ink: #e8e6e1;
+      --muted: #9aa0a8;
+      --line: #3a3e45;
+      --thick: #c9c6bf;
+      --clue: #e8e6e1;
+      --mine: #7fa6ff;
+      --accent: #7fa6ff;
+      --accent-soft: #263252;
+      --place: #4fd18b;
+      --place-soft: #1d3a2a;
+      --undo: #ff9a6b;
+      --undo-soft: #42261a;
+      --select: #4a4220;
+      --same: #2a2d33;
+    }
+  }
+
+  /* ================= PAGE LAYOUT ================= */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 24px 16px 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.01em; }
+  h1 span { color: var(--muted); font-weight: 400; font-size: 1rem; margin-left: 6px; }
+
+  .tabs { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  .tabs button {
+    border: 0; background: transparent; color: var(--muted);
+    padding: 8px 16px; border-radius: 8px; font-size: 0.95rem; cursor: pointer;
+  }
+  .tabs button.active { background: var(--accent); color: #fff; }
+
+  .loader {
+    max-width: 980px; margin: 0 auto; padding: 8px 16px 0;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  }
+  .loader label { color: var(--muted); font-size: 0.9rem; margin-right: 4px; }
+
+  button.btn, label.btn {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 7px 12px; border-radius: 8px; font-size: 0.9rem; cursor: pointer;
+  }
+  button.btn:hover, label.btn:hover { border-color: var(--accent); }
+  button.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.btn:disabled { opacity: 0.45; cursor: default; }
+  button.btn.picked { border-color: var(--accent); background: var(--accent-soft); }
+  input[type=file] { display: none; }
+
+  main {
+    max-width: 980px; margin: 0 auto; padding: 16px;
+    display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 820px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ================= THE BOARD ================= */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    aspect-ratio: 1;
+    width: 100%;
+    border: 3px solid var(--thick);
+    border-radius: 6px;
+    overflow: hidden;
+    background: var(--panel);
+    user-select: none;
+  }
+  .cell {
+    display: flex; align-items: center; justify-content: center;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    font-size: clamp(1rem, 4.6vw, 1.7rem);
+    font-variant-numeric: tabular-nums;
+    color: var(--mine);
+    transition: background 0.15s;
+  }
+  .cell.clue { color: var(--clue); font-weight: 650; }
+  .cell.c2, .cell.c5 { border-right: 2px solid var(--thick); }
+  .cell.r2, .cell.r5 { border-bottom: 2px solid var(--thick); }
+  .cell.c8 { border-right: 0; }
+  .cell.r8 { border-bottom: 0; }
+
+  .play .cell:not(.clue) { cursor: pointer; }
+  .cell.same { background: var(--same); }
+  .cell.selected { background: var(--select); }
+  .cell.current-place { background: var(--place-soft); color: var(--place); font-weight: 650; }
+  .cell.current-undo { background: var(--undo-soft); color: var(--undo); }
+  .cell.current-dead { background: var(--undo-soft); }
+  .cell.solved-pop { animation: pop 0.5s ease; }
+  @keyframes pop { 50% { background: var(--place-soft); } }
+
+  /* ================= SIDE PANEL ================= */
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px;
+  }
+  .panel h2 { margin: 0 0 4px; font-size: 1.05rem; }
+  .panel p.hint { margin: 0 0 14px; color: var(--muted); font-size: 0.9rem; line-height: 1.45; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+  .stat { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .stat b { display: block; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 0.78rem; }
+
+  .speed { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.85rem; }
+  .speed input { width: 140px; }
+
+  .explain { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; font-size: 0.9rem; }
+  .explain .title { font-weight: 600; margin-bottom: 8px; }
+  .explain .title.place { color: var(--place); }
+  .explain .title.undo, .explain .title.dead { color: var(--undo); }
+
+  table.bits { border-collapse: collapse; font-family: ui-monospace, Menlo, monospace; font-size: 0.82rem; width: 100%; }
+  table.bits th, table.bits td { padding: 3px 0; text-align: center; }
+  table.bits th { color: var(--muted); font-weight: 500; }
+  table.bits td.name { text-align: left; color: var(--muted); padding-right: 6px; white-space: nowrap; font-family: system-ui, sans-serif; }
+  table.bits tr.result td { border-top: 1px solid var(--line); font-weight: 700; }
+  table.bits td.on { color: var(--ink); font-weight: 700; }
+  table.bits td.off { color: var(--line); }
+  table.bits tr.result td.on { color: var(--place); }
+
+  .log { max-height: 160px; overflow-y: auto; font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem;
+         color: var(--muted); border-top: 1px solid var(--line); margin-top: 12px; padding-top: 8px; }
+  .log div.undo, .log div.dead { color: var(--undo); }
+
+  .pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 12px 0; }
+  .pad button { padding: 12px 0; font-size: 1.1rem; }
+  .timer { font-size: 2.2rem; font-variant-numeric: tabular-nums; font-weight: 650; letter-spacing: 0.02em; }
+  .message { margin-top: 10px; padding: 10px 12px; border-radius: 8px; font-size: 0.92rem; display: none; }
+  .message.show { display: block; }
+  .message.good { background: var(--place-soft); color: var(--place); }
+  .message.bad { background: var(--undo-soft); color: var(--undo); }
+  .message.info { background: var(--accent-soft); color: var(--accent); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sudoku <span>bitmask + backtracking</span></h1>
+  <div class="tabs">
+    <button id="tabWatch" class="active">Watch the algorithm</button>
+    <button id="tabPlay">Play</button>
+  </div>
+</header>
+
+<!-- ============ choose a puzzle ============ -->
+<div class="loader">
+  <label>Puzzle:</label>
+  <button class="btn" data-puzzle="1">Puzzle 1</button>
+  <button class="btn" data-puzzle="2">Puzzle 2</button>
+  <button class="btn" data-puzzle="3">Puzzle 3</button>
+  <button class="btn" data-puzzle="4">Puzzle 4</button>
+  <label class="btn" for="fileInput">Upload .txt…</label>
+  <input type="file" id="fileInput" accept=".txt">
+</div>
+
+<main>
+  <div id="board" class="board"></div>
+
+  <!-- ============ MODE 1: WATCH ============ -->
+  <section id="watchPanel" class="panel">
+    <h2>Watch the algorithm</h2>
+    <p class="hint">Each step picks the empty cell with the fewest options (MRV), places a digit, and undoes it if it leads to a dead end.</p>
+
+    <div class="row">
+      <button class="btn primary" id="playBtn">▶ Play</button>
+      <button class="btn" id="stepBtn">Step</button>
+      <button class="btn" id="resetBtn">Reset</button>
+      <button class="btn" id="finishBtn">Skip to end</button>
+    </div>
+    <div class="speed">Speed <input type="range" id="speed" min="1" max="100" value="45"> <span id="speedLabel"></span></div>
+
+    <div class="stats">
+      <div class="stat"><b id="statStep">0</b><span>steps shown</span></div>
+      <div class="stat"><b id="statUndo">0</b><span>undos</span></div>
+      <div class="stat"><b id="statAlgo">0.00 s</b><span>solve time</span></div>
+    </div>
+
+    <div class="explain" id="explain">Press Play or Step to start.</div>
+    <div class="log" id="log"></div>
+    <div class="message" id="watchMsg"></div>
+  </section>
+
+  <!-- ============ MODE 2: PLAY ============ -->
+  <section id="playPanel" class="panel hidden">
+    <h2>Your turn</h2>
+    <p class="hint">Click a cell, then type 1–9 or use the buttons. Backspace or 0 erases. Arrow keys move.</p>
+
+    <div class="timer" id="timer">00:00</div>
+
+    <div class="pad" id="pad">
+      <button class="btn" data-n="1">1</button><button class="btn" data-n="2">2</button>
+      <button class="btn" data-n="3">3</button><button class="btn" data-n="4">4</button>
+      <button class="btn" data-n="5">5</button><button class="btn" data-n="6">6</button>
+      <button class="btn" data-n="7">7</button><button class="btn" data-n="8">8</button>
+      <button class="btn" data-n="9">9</button><button class="btn" data-n="0">⌫</button>
+    </div>
+
+    <div class="row">
+      <button class="btn" id="restartBtn">Restart puzzle</button>
+      <button class="btn" id="checkBtn">Check</button>
+    </div>
+    <div class="message" id="playMsg"></div>
+  </section>
+</main>
+
+<script>
+/* =====================================================================
+   1) THE 4 PUZZLES FROM THE BRIEF (0 = empty)
+   They're also in your puzzles/ folder; the backend solves them by name.
+   ===================================================================== */
+const PUZZLES = {
+  1: "000150070106000820300860040900400567004708300732006004040081009017000208050037000",
+  2: "021000543060510872870402061004283010000645309608971005309027106250194738100050090",
+  3: "000708000060009800000430000000000600010005089038000400340807106056090730100050090",
+  4: "530070000600195000098000060800060003400803001700020006060000280000419005000080079"
+};
+
+/* =====================================================================
+   2) STATE
+   ===================================================================== */
+let mode = "watch";        // "watch" or "play"
+let puzzle = null;         // starting grid, 9x9 numbers (0 = empty)
+let solution = null;       // solved grid from YOUR BACKEND
+let puzzleName = "";
+
+// watch mode
+let steps = [];            // every step the algorithm takes (filled by recordSolve)
+let stepIndex = 0;         // how many steps have been shown
+let watchGrid = null;      // what the board looks like right now
+let timerId = null;        // the setTimeout running the animation
+let undoCount = 0;
+
+// play mode
+let playGrid = null;
+let selected = null;       // {r, c}
+let startTime = 0;
+let clockId = null;
+let finished = false;
+
+/* =====================================================================
+   3) TALKING TO YOUR SPRING BOOT BACKEND
+   Uses the two endpoints you already have. Nothing in Java changes.
+   ===================================================================== */
+
+// Your controller returns text like:
+//   Saved to puzzles/puzzle1.solution.txt
+//
+//   4    2    8  |  1    5    9  |  6    7    3
+//   ...
+// This pulls the 81 digits back out of that text.
+function parseBoardText(text) {
+  const rows = [];
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (t === "" || /^-+$/.test(t) || t.startsWith("Saved")) continue; // skip non-board lines
+    const digits = t.replace(/[\s|]/g, "").replace(/\./g, "0");          // drop spaces and |
+    if (!/^[0-9]{9}$/.test(digits)) throw new Error("Unexpected line: " + t);
+    rows.push([...digits].map(Number));
+  }
+  if (rows.length !== 9) throw new Error("Expected 9 rows, got " + rows.length);
+  return rows;
+}
+
+// Puzzle 1-4 already exist in puzzles/, so use POST /api/sudoku/solve/{name}
+async function solveByName(name) {
+  const res = await fetch("/api/sudoku/solve/" + encodeURIComponent(name), { method: "POST" });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text);
+  return parseBoardText(text);
+}
+
+// An uploaded file goes to POST /api/sudoku/upload (saved in puzzles/, then solved)
+async function solveByUpload(file) {
+  const form = new FormData();
+  form.append("file", file);                 // key must be "file", same as in Postman
+  const res = await fetch("/api/sudoku/upload", { method: "POST", body: form });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text);
+  return parseBoardText(text);
+}
+
+/* =====================================================================
+   4) LOADING A PUZZLE
+   ===================================================================== */
+function gridFromString(s) {
+  const g = [];
+  for (let r = 0; r < 9; r++) g.push([...s.slice(r * 9, r * 9 + 9)].map(Number));
+  return g;
+}
+const copy = g => g.map(row => row.slice());
+
+async function loadBuiltIn(n) {
+  markPicked(n);
+  await loadPuzzle("puzzle" + n, gridFromString(PUZZLES[n]), () => solveByName("puzzle" + n));
+}
+
+async function loadFromFile(file) {
+  markPicked(null);
+  const text = await file.text();
+  let grid;
+  try {
+    grid = parseBoardText(text);   // same rules as SudokuBoard.fromFile: skip spaces, |, ---- lines
+  } catch (e) {
+    // the file is broken: still send it, so the backend's own error message is shown
+    try { await solveByUpload(file); showMessage("Could not read that file.", "bad"); }
+    catch (err) { showMessage("Backend says: " + err.message, "bad"); }
+    return;
+  }
+  await loadPuzzle(file.name.replace(/\.txt$/, ""), grid, () => solveByUpload(file));
+}
+
+let loadToken = 0;   // so a slow answer for an old puzzle can't overwrite a newer one
+
+async function loadPuzzle(name, grid, askBackend) {
+  const myToken = ++loadToken;
+  hideMessages();
+
+  // 1) show the new puzzle straight away
+  puzzleName = name;
+  puzzle = grid;
+  solution = null;
+  resetWatch();
+  resetPlay();
+  render();
+
+  // 2) meanwhile, ask the backend for the official solution
+  try {
+    const answer = await askBackend();
+    if (myToken !== loadToken) return;     // user already picked another puzzle
+    solution = answer;
+    if (stepIndex > 0 && stepIndex >= steps.length) onWatchDone();
+  } catch (e) {
+    if (myToken !== loadToken) return;
+    showMessage("Backend says: " + e.message, "bad");
+  }
+}
+
+function markPicked(n) {
+  document.querySelectorAll("[data-puzzle]").forEach(b =>
+    b.classList.toggle("picked", String(n) === b.dataset.puzzle));
+}
+
+/* =====================================================================
+   5) THE ALGORITHM, RECORDED STEP BY STEP (for Watch mode)
+   The backend only returns the final answer, so to *show* the steps,
+   the browser runs the same algorithm as SudokuSolver.java and writes
+   down every move. Same bitmasks, same MRV, same backtracking.
+   ===================================================================== */
+const ALL_DIGITS = 0b1111111110;            // bits 1-9, same constant as in Java
+const boxIndex = (r, c) => Math.floor(r / 3) * 3 + Math.floor(c / 3);
+const bitCount = m => { let n = 0; while (m) { n += m & 1; m >>= 1; } return n; };
+
+function recordSolve(start, record = true) {
+  const g = copy(start);
+  const rows = new Array(9).fill(0), cols = new Array(9).fill(0), boxes = new Array(9).fill(0);
+  const log = [];
+  if (!record) log.push = () => {};          // timing mode: don't record steps, just solve
+  const LIMIT = 200000;                     // safety cap so the page never freezes
+
+  // record the clues (same as solve() in Java)
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    const d = g[r][c];
+    if (!d) continue;
+    const bit = 1 << d, b = boxIndex(r, c);
+    if ((rows[r] & bit) || (cols[c] & bit) || (boxes[b] & bit)) return { solved: false, log };
+    rows[r] |= bit; cols[c] |= bit; boxes[b] |= bit;
+  }
+
+  function backtrack() {
+    if (log.length > LIMIT) return false;
+
+    // MRV: find the empty cell with the fewest options
+    let bestR = -1, bestC = -1, bestMask = 0, bestCount = 10;
+    outer:
+    for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+      if (g[r][c] !== 0) continue;
+      const mask = ~(rows[r] | cols[c] | boxes[boxIndex(r, c)]) & ALL_DIGITS;
+      const count = bitCount(mask);
+      if (count < bestCount) {
+        bestCount = count; bestR = r; bestC = c; bestMask = mask;
+        if (count === 0) {
+          log.push({ type: "dead", r, c, row: rows[r], col: cols[c], box: boxes[boxIndex(r, c)] });
+          return false;
+        }
+        if (count === 1) break outer;
+      }
+    }
+    if (bestR === -1) return true;          // no empty cells: solved
+
+    const b = boxIndex(bestR, bestC);
+    for (let d = 1; d <= 9; d++) {
+      const bit = 1 << d;
+      if (!(bestMask & bit)) continue;
+
+      log.push({ type: "place", r: bestR, c: bestC, d, options: bestMask, forced: bestCount === 1,
+                 row: rows[bestR], col: cols[bestC], box: boxes[b] });   // masks BEFORE placing
+      g[bestR][bestC] = d;
+      rows[bestR] |= bit; cols[bestC] |= bit; boxes[b] |= bit;
+
+      if (backtrack()) return true;
+
+      g[bestR][bestC] = 0;
+      rows[bestR] &= ~bit; cols[bestC] &= ~bit; boxes[b] &= ~bit;
+      log.push({ type: "undo", r: bestR, c: bestC, d });
+    }
+    return false;
+  }
+
+  const solved = backtrack();
+  return { solved, log, grid: g };
+}
+
+// Time the same algorithm without recording steps (that's the real speed).
+// One solve is far under 1 ms, and some browsers (Safari, Firefox) round
+// performance.now() to whole milliseconds. So: keep solving until at least
+// 100 ms have passed, then divide by how many solves fit in that time.
+function timeAlgorithm(start) {
+  recordSolve(start, false);                     // warm-up run (first run is always slower)
+  const MIN_MS = 100;
+  let runs = 0;
+  const t0 = performance.now();
+  let elapsed = 0;
+  do {
+    recordSolve(start, false);
+    runs++;
+    elapsed = performance.now() - t0;
+  } while (elapsed < MIN_MS && runs < 100000);
+  return elapsed / runs;                         // average time for ONE solve
+}
+
+
+/* =====================================================================
+   6) WATCH MODE: playing the recorded steps
+   ===================================================================== */
+/* ---------- the solve-time stopwatch ----------
+   0 before Play, counts while playing, freezes on pause, 0 again on Reset,
+   stops when the puzzle is solved. It measures the animation you watch;
+   the real (un-slowed) algorithm time is shown in the message at the end. */
+let swElapsed = 0;        // ms counted so far (while paused)
+let swSince = null;       // performance.now() when it last started running, or null if stopped
+let swFrame = null;       // requestAnimationFrame id for redrawing the clock
+let realAlgoMs = 0;       // how long ONE real (un-slowed) solve takes, measured on load
+
+function swNow() { return swElapsed + (swSince !== null ? performance.now() - swSince : 0); }
+function swDraw() { document.getElementById("statAlgo").textContent = formatClock(swNow()); }
+function swStart() {
+  if (swSince !== null) return;
+  swSince = performance.now();
+  const loop = () => { swDraw(); swFrame = requestAnimationFrame(loop); };
+  loop();
+}
+function swStop() {
+  if (swSince !== null) { swElapsed += performance.now() - swSince; swSince = null; }
+  if (swFrame) cancelAnimationFrame(swFrame);
+  swFrame = null;
+  swDraw();
+}
+function swReset() { swStop(); swElapsed = 0; swDraw(); }
+
+function formatClock(ms) {
+  if (ms === 0) return "0.00 s";
+  if (ms < 1) return ms.toFixed(3) + " ms";   // e.g. 0.022 ms
+  if (ms < 1000) return ms.toFixed(1) + " ms";
+  return (ms / 1000).toFixed(2) + " s";
+}
+
+function isFullSpeed() {
+  return Number(document.getElementById("speed").value) >= 100;
+}
+
+function resetWatch() {
+  stopAnimation();
+  watchGrid = puzzle ? copy(puzzle) : null;
+  stepIndex = 0;
+  undoCount = 0;
+  steps = [];
+  swReset();
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("statStep").textContent = "0";
+  document.getElementById("statUndo").textContent = "0";
+  document.getElementById("explain").textContent = puzzle ? "Press Play or Step to start." : "Pick a puzzle above.";
+  setWatchButtons();
+  if (!puzzle) return;
+
+  const result = recordSolve(puzzle);
+  steps = result.log;
+  realAlgoMs = timeAlgorithm(puzzle);
+
+  if (!result.solved) showWatchMessage("This puzzle has no solution.", "bad");
+  setWatchButtons();
+}
+
+function applyStep(step) {
+  if (step.type === "place") watchGrid[step.r][step.c] = step.d;
+  if (step.type === "undo") { watchGrid[step.r][step.c] = 0; undoCount++; }
+}
+
+function stepOnce() {
+  if (stepIndex >= steps.length) return false;
+  const step = steps[stepIndex++];
+  applyStep(step);
+  showStep(step);
+  render(step);
+  if (stepIndex >= steps.length) onWatchDone();
+  return true;
+}
+
+function delay() {
+  const v = Number(document.getElementById("speed").value);   // 1..100
+  if (v >= 100) return 0;                                        // full speed: no waiting at all
+  return Math.round(900 * Math.pow(0.94, v));                    // ~850ms down to ~2ms
+}
+
+// How many steps to draw per tick. Normally 1. At full speed on a puzzle with
+// thousands of steps, several are drawn per tick so it still finishes in a few
+// seconds; every step is still applied, only the screen updates less often.
+function stepsPerTick() {
+  return isFullSpeed() ? Math.max(1, Math.ceil(steps.length / 400)) : 1;
+}
+
+function play() {
+  if (stepIndex >= steps.length) return;
+  stopAnimation();
+  swStart();
+  const tick = () => {
+    // apply the extra steps of this batch without redrawing (much faster)...
+    for (let i = stepsPerTick() - 1; i > 0 && stepIndex < steps.length - 1; i--) {
+      applyStep(steps[stepIndex++]);
+    }
+    // ...then apply one more step and redraw the board once
+    if (!stepOnce()) { stopAnimation(); return; }
+    if (stepIndex >= steps.length) return;     // solved (onWatchDone already stopped everything)
+    timerId = setTimeout(tick, delay());
+  };
+  timerId = setTimeout(tick, 0);
+  setWatchButtons();
+}
+
+function stopAnimation() {
+  if (timerId) clearTimeout(timerId);
+  timerId = null;
+  swStop();
+  setWatchButtons();
+}
+
+// "Skip to end": jump straight to the solved board (the stopwatch just stops)
+function finish() {
+  stopAnimation();
+  if (stepIndex >= steps.length) return;
+  let last = null;
+  while (stepIndex < steps.length) { last = steps[stepIndex++]; applyStep(last); }
+  showStep(last);
+  render(last);
+  onWatchDone();
+}
+
+function onWatchDone() {
+  stopAnimation();
+  showWatchMessage("Solved in " + steps.length + " steps, " + formatClock(swNow()) +
+                   ". Real algorithm speed: " + formatClock(realAlgoMs) + ".", "good");
+}
+
+function setWatchButtons() {
+  const has = steps.length > 0, done = stepIndex >= steps.length, running = timerId !== null;
+  const playBtn = document.getElementById("playBtn");
+  playBtn.textContent = running ? "❚❚ Pause" : "▶ Play";
+  playBtn.disabled = !has || done;
+  document.getElementById("stepBtn").disabled = !has || done || running;
+  document.getElementById("finishBtn").disabled = !has || done;
+  document.getElementById("resetBtn").disabled = !puzzle;
+}
+
+// side panel: what is happening in this step, with the bits
+function showStep(step) {
+  document.getElementById("statStep").textContent = stepIndex;
+  document.getElementById("statUndo").textContent = undoCount;
+
+  const ex = document.getElementById("explain");
+  const where = "(" + step.r + ", " + step.c + ")";
+  let html = "";
+
+  if (step.type === "place") {
+    const opts = digitsOf(step.options);
+    html += `<div class="title place">${step.forced ? "Place" : "Guess"} ${step.d} at ${where}</div>`;
+    html += `<div style="margin-bottom:8px">Options: {${opts.join(", ")}}${step.forced ? " (only one, so it's forced)" : " (more than one, so the solver guesses the smallest first)"}</div>`;
+    html += bitsTable(step);
+  } else if (step.type === "undo") {
+    html += `<div class="title undo">Undo ${step.d} at ${where}</div>`;
+    html += `<div>That guess led to a dead end, so it's erased and its bits are switched off in the row, column and box. The solver tries the next option.</div>`;
+  } else {
+    html += `<div class="title dead">Dead end at ${where}</div>`;
+    html += `<div style="margin-bottom:8px">This empty cell has no options left, so an earlier guess was wrong.</div>`;
+    html += bitsTable(step);
+  }
+  ex.innerHTML = html;
+
+  const log = document.getElementById("log");
+  const line = document.createElement("div");
+  line.className = step.type;
+  line.textContent = stepIndex + ". " +
+    (step.type === "place" ? (step.forced ? "place " : "guess ") + step.d + " at " + where :
+     step.type === "undo" ? "undo " + step.d + " at " + where : "dead end at " + where);
+  log.appendChild(line);
+  if (log.children.length > 300) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+// the row / column / box bitmasks for the current cell, digits 1..9
+function bitsTable(step) {
+  const used = step.row | step.col | step.box;
+  const free = ~used & ALL_DIGITS;
+  const line = (name, mask, cls) => {
+    let cells = "";
+    for (let d = 1; d <= 9; d++) cells += `<td class="${mask & (1 << d) ? "on" : "off"}">${mask & (1 << d) ? 1 : 0}</td>`;
+    return `<tr class="${cls || ""}"><td class="name">${name}</td>${cells}</tr>`;
+  };
+  let head = "<tr><th></th>";
+  for (let d = 1; d <= 9; d++) head += `<th>${d}</th>`;
+  head += "</tr>";
+  return `<table class="bits">${head}
+      ${line("row " + step.r, step.row)}
+      ${line("col " + step.c, step.col)}
+      ${line("box " + boxIndex(step.r, step.c), step.box)}
+      ${line("OR = used", used)}
+      ${line("~used = free", free, "result")}
+    </table>`;
+}
+
+const digitsOf = m => { const a = []; for (let d = 1; d <= 9; d++) if (m & (1 << d)) a.push(d); return a; };
+const sameGrid = (a, b) => a && b && a.every((row, r) => row.every((v, c) => v === b[r][c]));
+
+/* =====================================================================
+   7) PLAY MODE
+   ===================================================================== */
+function resetPlay() {
+  stopClock();
+  playGrid = puzzle ? copy(puzzle) : null;
+  selected = null;
+  finished = false;
+  document.getElementById("timer").textContent = "00:00";
+  hidePlayMessage();
+  if (mode === "play" && puzzle) startClock();
+}
+
+function startClock() {
+  stopClock();
+  startTime = Date.now();
+  clockId = setInterval(updateClock, 250);
+}
+function stopClock() {
+  if (clockId) clearInterval(clockId);
+  clockId = null;
+}
+function updateClock() {
+  document.getElementById("timer").textContent = formatTime(Date.now() - startTime);
+}
+function formatTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+}
+
+function enterNumber(n) {
+  if (mode !== "play" || !selected || finished) return;
+  const { r, c } = selected;
+  if (puzzle[r][c] !== 0) return;          // clues can't be changed
+  if (!(n >= 0 && n <= 9)) return;          // only 1-9 (0 = erase)
+  playGrid[r][c] = n;
+  hidePlayMessage();
+  render();
+  if (isFull(playGrid)) checkPlay(true);
+}
+
+function isFull(g) { return g.every(row => row.every(v => v !== 0)); }
+
+function checkPlay(auto) {
+  if (!solution) { showPlayMessage("Still waiting for the backend's solution (is the server running?).", "bad"); return; }
+  if (sameGrid(playGrid, solution)) {
+    finished = true;
+    stopClock();
+    const time = formatTime(Date.now() - startTime);
+    showPlayMessage("Solved! Your time: " + time, "good");
+    document.querySelectorAll(".cell").forEach(el => el.classList.add("solved-pop"));
+    return;
+  }
+  if (isFull(playGrid)) showPlayMessage("The board is full but something isn't right yet. Keep going!", "bad");
+  else if (!auto) {
+    const empty = playGrid.flat().filter(v => v === 0).length;
+    showPlayMessage(empty + " empty cells left.", "info");
+  }
+}
+
+/* =====================================================================
+   8) DRAWING THE BOARD
+   ===================================================================== */
+const boardEl = document.getElementById("board");
+const cells = [];
+for (let r = 0; r < 9; r++) {
+  cells.push([]);
+  for (let c = 0; c < 9; c++) {
+    const el = document.createElement("div");
+    el.className = `cell r${r} c${c}`;
+    el.addEventListener("click", () => {
+      if (mode !== "play" || !puzzle) return;
+      selected = { r, c };
+      render();
+    });
+    boardEl.appendChild(el);
+    cells[r].push(el);
+  }
+}
+
+function render(currentStep) {
+  boardEl.classList.toggle("play", mode === "play");
+  const grid = mode === "watch" ? watchGrid : playGrid;
+  const selVal = (mode === "play" && selected && grid) ? grid[selected.r][selected.c] : 0;
+
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    const el = cells[r][c];
+    const v = grid ? grid[r][c] : 0;
+    el.textContent = v ? v : "";
+    el.className = `cell r${r} c${c}`;
+    if (puzzle && puzzle[r][c] !== 0) el.classList.add("clue");
+
+    if (mode === "play" && selected) {
+      if (selected.r === r && selected.c === c) el.classList.add("selected");
+      else if (selVal && v === selVal) el.classList.add("same");
+    }
+    if (mode === "watch" && currentStep && currentStep.r === r && currentStep.c === c) {
+      el.classList.add("current-" + currentStep.type);
+    }
+  }
+}
+
+/* =====================================================================
+   9) MESSAGES
+   ===================================================================== */
+function showMessage(text, kind) {
+  (mode === "watch" ? showWatchMessage : showPlayMessage)(text, kind);
+}
+function showWatchMessage(text, kind) {
+  const m = document.getElementById("watchMsg");
+  m.textContent = text; m.className = "message show " + kind;
+}
+function showPlayMessage(text, kind) {
+  const m = document.getElementById("playMsg");
+  m.textContent = text; m.className = "message show " + kind;
+}
+function hidePlayMessage() { document.getElementById("playMsg").className = "message"; }
+function hideMessages() {
+  document.getElementById("watchMsg").className = "message";
+  hidePlayMessage();
+}
+
+/* =====================================================================
+   10) BUTTONS AND KEYBOARD
+   ===================================================================== */
+function setMode(m) {
+  mode = m;
+  document.getElementById("tabWatch").classList.toggle("active", m === "watch");
+  document.getElementById("tabPlay").classList.toggle("active", m === "play");
+  document.getElementById("watchPanel").classList.toggle("hidden", m !== "watch");
+  document.getElementById("playPanel").classList.toggle("hidden", m !== "play");
+  stopAnimation();
+  if (m === "play") resetPlay(); else stopClock();
+  render(m === "watch" && stepIndex > 0 ? steps[stepIndex - 1] : undefined);
+}
+
+document.getElementById("tabWatch").onclick = () => setMode("watch");
+document.getElementById("tabPlay").onclick = () => setMode("play");
+document.querySelectorAll("[data-puzzle]").forEach(b => b.onclick = () => loadBuiltIn(b.dataset.puzzle));
+document.getElementById("fileInput").onchange = e => {
+  if (e.target.files[0]) loadFromFile(e.target.files[0]);
+  e.target.value = "";
+};
+
+document.getElementById("playBtn").onclick = () => (timerId ? stopAnimation() : play());
+document.getElementById("stepBtn").onclick = () => { stepOnce(); setWatchButtons(); };
+document.getElementById("resetBtn").onclick = () => { resetWatch(); hideMessages(); render(); };
+document.getElementById("finishBtn").onclick = finish;
+function updateSpeedLabel() {
+  document.getElementById("speedLabel").textContent = isFullSpeed() ? "full speed" : "";
+}
+document.getElementById("speed").oninput = updateSpeedLabel;
+updateSpeedLabel();
+
+document.querySelectorAll("#pad [data-n]").forEach(b => b.onclick = () => enterNumber(Number(b.dataset.n)));
+document.getElementById("restartBtn").onclick = () => { resetPlay(); render(); };
+document.getElementById("checkBtn").onclick = () => checkPlay(false);
+
+document.addEventListener("keydown", e => {
+  if (mode !== "play" || !puzzle) return;
+  if (e.key >= "1" && e.key <= "9") enterNumber(Number(e.key));
+  else if (e.key === "0" || e.key === "Backspace" || e.key === "Delete") enterNumber(0);
+  else if (e.key.startsWith("Arrow")) {
+    e.preventDefault();
+    if (!selected) selected = { r: 0, c: 0 };
+    else {
+      const d = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
+      selected = { r: (selected.r + d[0] + 9) % 9, c: (selected.c + d[1] + 9) % 9 };
+    }
+    render();
+  }
+});
+
+// start with Puzzle 1
+loadBuiltIn(1);
+</script>
+</body>
+</html>
